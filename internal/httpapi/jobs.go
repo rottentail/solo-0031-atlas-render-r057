@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"atlas-render/internal/capacity"
 	"atlas-render/internal/model"
 	"atlas-render/internal/observe"
 	"net/http"
@@ -24,7 +25,8 @@ func (a API) submit(w http.ResponseWriter, r *http.Request) {
 	write(w, 202, v)
 }
 func (a API) getJob(w http.ResponseWriter, r *http.Request) {
-	v, ok := a.Service.Store.Read().Jobs[r.PathValue("id")]
+	v, ok := model.Job{}, false
+	a.Service.Store.View(func(st model.State) { v, ok = st.Jobs[r.PathValue("id")] })
 	if !ok {
 		fail(w, model.Missing("job not found"))
 		return
@@ -101,8 +103,14 @@ func (a API) compare(w http.ResponseWriter, r *http.Request) {
 	write(w, 200, v)
 }
 func (a API) status(w http.ResponseWriter, r *http.Request) {
-	write(w, 200, observe.Summary(a.Service.Store.Read()))
+	var summary map[string]any
+	a.Service.Store.View(func(st model.State) {
+		summary = observe.Summary(st, a.Service.Limits, capacity.CurrentRuntime())
+	})
+	write(w, 200, summary)
 }
 func (a API) events(w http.ResponseWriter, r *http.Request) {
-	write(w, 200, a.Service.Store.Read().Events)
+	var events []model.Event
+	a.Service.Store.View(func(st model.State) { events = append(events, st.Events...) })
+	write(w, 200, events)
 }

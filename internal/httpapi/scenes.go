@@ -25,7 +25,8 @@ func (a API) putScene(w http.ResponseWriter, r *http.Request) {
 	write(w, 200, v)
 }
 func (a API) getScene(w http.ResponseWriter, r *http.Request) {
-	v, ok := a.Service.Store.Read().Scenes[r.PathValue("id")]
+	v, ok := model.Scene{}, false
+	a.Service.Store.View(func(st model.State) { v, ok = st.Scenes[r.PathValue("id")] })
 	if !ok {
 		fail(w, model.Missing("scene not found"))
 		return
@@ -64,7 +65,8 @@ func (a API) freeze(w http.ResponseWriter, r *http.Request) {
 	write(w, 201, v)
 }
 func (a API) getSnapshot(w http.ResponseWriter, r *http.Request) {
-	v, ok := a.Service.Store.Read().Snapshots[r.PathValue("id")]
+	v, ok := model.Snapshot{}, false
+	a.Service.Store.View(func(st model.State) { v, ok = st.Snapshots[r.PathValue("id")] })
 	if !ok {
 		fail(w, model.Missing("snapshot not found"))
 		return

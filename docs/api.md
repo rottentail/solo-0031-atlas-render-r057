@@ -21,10 +21,12 @@
 | GET /artifacts/{id} | 可选If-None-Match | PNG，200或304 |
 | DELETE /artifacts/{id} | 无 | state，200 |
 | POST /compare | left, right（结果ID） | 像素比较，200 |
-| GET /status | 无 | 场景/素材/快照/任务计数和结果字节数 |
+| GET /status | 无 | 场景/素材/快照/任务计数、结果字节数和capacity容量块 |
 | GET /events | 无 | 最多500个有序领域事件 |
 
 `GET /healthz` 不带 `/v1`，返回ready。它表明进程已打开并恢复状态，不包含单独的磁盘可写探测。任务响应省略固定输入的有效载荷，输入细节通过快照接口读取。
+
+`GET /status` 的 `capacity` 块报告接收状态：`accepting` 表示下一个空载任务能否通过队列门禁；`queueDepth`/`queueBytes` 是当前未结束承诺用量，`queueDepthLimit`/`queueBytesLimit`/`workPixelLimit`/`assetBytesLimit` 是实际生效的门禁阈值，`gomaxprocs`/`memoryLimitBytes` 是运行时资源边界。单任务预算（工作像素、解码素材字节）在提交时另行核对，超限与队列不足一样返回 429，且不消耗幂等收据。
 
 文档字段：width、height、background、layers。每个图层有id、kind、width、height、transform、opacity、fill；transform包括x、y、scaleX、scaleY、degrees。图层可以有clip（x/y/width/height），group使用children，polygon使用points，image使用assetId。solid颜料有color；linear还包括endColor、from、to。示例是可直接提交的完整请求。
 

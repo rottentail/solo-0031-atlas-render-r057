@@ -1,6 +1,7 @@
 package raster
 
 import (
+	"atlas-render/internal/capacity"
 	"atlas-render/internal/codec"
 	"atlas-render/internal/geometry"
 	"atlas-render/internal/model"
@@ -28,7 +29,10 @@ type Plan struct {
 	Cost                 int64
 }
 
-func Compile(s model.Snapshot, scale int) (Plan, error) {
+// Compile 校验场景并构建绘制计划，同时核对单任务容量门禁：
+// 工作像素（CPU 预算）和解码素材字节（内存预算）。接受任务前与
+// 执行前都必须通过同一组门禁，超限返回 429 容量错误。
+func Compile(s model.Snapshot, scale int, lm capacity.Limits) (Plan, error) {
 	if e := scene.Validate(s.Document); e != nil {
 		return Plan{}, e
 	}
@@ -37,6 +41,7 @@ func Compile(s model.Snapshot, scale int) (Plan, error) {
 	}
 	p := Plan{Width: s.Document.Width * scale, Height: s.Document.Height * scale, Scale: scale, Background: s.Document.Background}
 	decoded := map[string]image.Image{}
+	var assetBytes int64
 	var walk func([]model.Layer, geometry.Matrix, []clip, float64) error
 	walk = func(ls []model.Layer, parent geometry.Matrix, clips []clip, alpha float64) error {
 		for _, l := range ls {
@@ -84,11 +89,16 @@ func Compile(s model.Snapshot, scale int) (Plan, error) {
 						return e
 					}
 					decoded[l.AssetID] = img
+					b := img.Bounds()
+					assetBytes += int64(b.Dx()) * int64(b.Dy()) * 4
+					if assetBytes > lm.AssetBytes {
+						return model.Busy("scene exceeds decoded asset memory budget")
+					}
 				}
 				op.bitmap = img
 			}
 			p.Cost += int64(b.Dx()) * int64(b.Dy())
-			if p.Cost > 40_000_000 {
+			if p.Cost > lm.WorkPixels {
 				return model.Busy("scene exceeds raster work budget")
 			}
 			p.ops = append(p.ops, op)

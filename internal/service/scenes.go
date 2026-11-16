@@ -1,6 +1,7 @@
 package service
 
 import (
+	"atlas-render/internal/capacity"
 	"atlas-render/internal/model"
 	"atlas-render/internal/persist"
 	"atlas-render/internal/scene"
@@ -8,7 +9,11 @@ import (
 	"time"
 )
 
-type Service struct{ Store *persist.Store }
+// Service 组织业务状态转换；Limits 是接受新承诺前必须通过的容量门禁。
+type Service struct {
+	Store  *persist.Store
+	Limits capacity.Limits
+}
 
 func (s *Service) PutScene(id, name string, expected int, d model.Document) (model.Scene, error) {
 	var out model.Scene

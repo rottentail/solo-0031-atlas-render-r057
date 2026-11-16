@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"atlas-render/internal/capacity"
 	"atlas-render/internal/codec"
 	"atlas-render/internal/model"
 	"atlas-render/internal/persist"
@@ -15,12 +16,13 @@ import (
 
 type Worker struct {
 	store  *persist.Store
+	limits capacity.Limits
 	mu     sync.Mutex
 	active map[string]context.CancelFunc
 }
 
-func New(st *persist.Store) *Worker {
-	return &Worker{store: st, active: map[string]context.CancelFunc{}}
+func New(st *persist.Store, lm capacity.Limits) *Worker {
+	return &Worker{store: st, limits: lm, active: map[string]context.CancelFunc{}}
 }
 func (w *Worker) Recover() error {
 	return w.store.Update(func(s *model.State) error {
@@ -59,22 +61,26 @@ func (w *Worker) Run(ctx context.Context) {
 func (w *Worker) claim() (model.Job, bool, error) {
 	var job model.Job
 	found := false
-	state := w.store.Read()
+	// 只读扫描候选，不在每个 tick 克隆整份状态；过载时状态可能很大。
 	ids := []string{}
-	for id, j := range state.Jobs {
-		if j.State == "queued" {
-			ids = append(ids, id)
+	created := map[string]time.Time{}
+	w.store.View(func(s model.State) {
+		for id, j := range s.Jobs {
+			if j.State == "queued" {
+				ids = append(ids, id)
+				created[id] = j.CreatedAt
+			}
 		}
-	}
+	})
 	if len(ids) == 0 {
 		return job, false, nil
 	}
 	sort.Slice(ids, func(i, j int) bool {
-		a, b := state.Jobs[ids[i]], state.Jobs[ids[j]]
-		if a.CreatedAt.Equal(b.CreatedAt) {
-			return a.ID < b.ID
+		a, b := created[ids[i]], created[ids[j]]
+		if a.Equal(b) {
+			return ids[i] < ids[j]
 		}
-		return a.CreatedAt.Before(b.CreatedAt)
+		return a.Before(b)
 	})
 	e := w.store.Update(func(s *model.State) error {
 		j := s.Jobs[ids[0]]
@@ -103,11 +109,12 @@ func (w *Worker) step(parent context.Context) error {
 	w.mu.Unlock()
 	defer func() { w.mu.Lock(); delete(w.active, j.ID); w.mu.Unlock() }()
 	// Cancellation can commit between claim and tracking; consult the committed state.
-	current := w.store.Read().Jobs[j.ID]
+	current := model.Job{}
+	w.store.View(func(s model.State) { current = s.Jobs[j.ID] })
 	if current.State != "running" {
 		cancel()
 	}
-	plan, e := raster.Compile(j.Payload, j.Scale)
+	plan, e := raster.Compile(j.Payload, j.Scale, w.limits)
 	var data []byte
 	if e == nil {
 		var imgErr error

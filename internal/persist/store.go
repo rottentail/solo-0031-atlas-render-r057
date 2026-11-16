@@ -57,7 +57,16 @@ func (s *Store) Close() error {
 	s.lock = nil
 	return e
 }
-func (s *Store) Read() model.State { s.mu.RLock(); defer s.mu.RUnlock(); return model.Clone(s.state) }
+
+// View 在读锁内同步执行只读检查，不复制状态。fn 不得修改状态、
+// 不得保存引用在锁外使用；需要带出数据时在 fn 内显式复制。
+// 过载期间状态可能很大，热路径（状态、事件、任务查询、执行器领取）
+// 必须使用 View 而不是全量克隆，保证健康与取消查询有有界延迟。
+func (s *Store) View(fn func(model.State)) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	fn(s.state)
+}
 func (s *Store) Update(fn func(*model.State) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -71,6 +71,10 @@
     {
       "workflow_id": "observe-service",
       "command": "python3 scripts/walkthrough.py --workflow observe-service"
+    },
+    {
+      "workflow_id": "capacity-drill",
+      "command": "python3 scripts/capacity_drill.py"
     }
   ],
   "environment": {

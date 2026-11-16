@@ -1,6 +1,7 @@
 package observe
 
 import (
+	"atlas-render/internal/capacity"
 	"atlas-render/internal/codec"
 	"atlas-render/internal/model"
 	"image/color"
@@ -53,7 +54,11 @@ func Compare(a, b model.Artifact) (Comparison, error) {
 	out.MeanDelta = float64(total) / float64(out.Width*out.Height*4)
 	return out, nil
 }
-func Summary(st model.State) map[string]any {
+
+// Summary 汇总实体计数、结果字节与容量接收状态。capacity 块报告
+// 实际生效的门禁阈值、当前未结束承诺用量和运行时资源边界；
+// accepting 表示下一个空载任务能否通过队列门禁（单任务预算另核）。
+func Summary(st model.State, lm capacity.Limits, rt capacity.Runtime) map[string]any {
 	jobs := map[string]int{}
 	for _, j := range st.Jobs {
 		jobs[j.State]++
@@ -62,5 +67,20 @@ func Summary(st model.State) map[string]any {
 	for _, a := range st.Artifacts {
 		bytes += len(a.PNG)
 	}
-	return map[string]any{"sceneCount": len(st.Scenes), "assetCount": len(st.Assets), "snapshotCount": len(st.Snapshots), "jobs": jobs, "artifactBytes": bytes, "sequence": st.Sequence}
+	depth, queueBytes := capacity.QueueUsage(st)
+	return map[string]any{
+		"sceneCount": len(st.Scenes), "assetCount": len(st.Assets), "snapshotCount": len(st.Snapshots),
+		"jobs": jobs, "artifactBytes": bytes, "sequence": st.Sequence,
+		"capacity": map[string]any{
+			"accepting":        depth < lm.QueueDepth && queueBytes < lm.QueueBytes,
+			"queueDepth":       depth,
+			"queueDepthLimit":  lm.QueueDepth,
+			"queueBytes":       queueBytes,
+			"queueBytesLimit":  lm.QueueBytes,
+			"workPixelLimit":   lm.WorkPixels,
+			"assetBytesLimit":  lm.AssetBytes,
+			"gomaxprocs":       rt.GOMAXPROCS,
+			"memoryLimitBytes": rt.MemoryLimit,
+		},
+	}
 }

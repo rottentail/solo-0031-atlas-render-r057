@@ -8,6 +8,20 @@ User=atlas
 WorkingDirectory=/opt/atlas
 Environment=ATLAS_ADDR=127.0.0.1:8763
 Environment=ATLAS_STATE=/var/lib/atlas/state.json
+# 受限环境资源边界：cgroup 约束是硬边界，进程内门禁是软边界，
+# 两者必须一致且软边界更低，让服务在触及硬边界前自行拒绝新承诺。
+# CPUQuota=200% 约等于两个核，GOMAXPROCS 与之对齐避免调度抖动。
+CPUQuota=200%
+Environment=GOMAXPROCS=2
+# MemoryMax 是 cgroup 硬上限；ATLAS_MEMORY_LIMIT 是 Go 运行时软上限，
+# 预留约 25% 给堆外（PNG 缓冲、栈、内核页缓存），超限前服务先返回 429。
+MemoryMax=512M
+Environment=ATLAS_MEMORY_LIMIT=402653184
+# 容量门禁：未结束承诺的数量与驻留字节估计上限，可按实例规格收紧。
+Environment=ATLAS_QUEUE_DEPTH=64
+Environment=ATLAS_QUEUE_BYTES=268435456
+Environment=ATLAS_WORK_PIXELS=40000000
+Environment=ATLAS_ASSET_BYTES=67108864
 ExecStart=/opt/atlas/atlas
 Restart=on-failure
 TimeoutStopSec=20

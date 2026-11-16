@@ -62,6 +62,11 @@
       "id": "httpapi",
       "path": "internal/httpapi",
       "responsibility": "有界JSON解析和HTTP接口"
+    },
+    {
+      "id": "capacity",
+      "path": "internal/capacity",
+      "responsibility": "容量门禁阈值、运行时资源边界和驻留估计"
     }
   ],
   "workflows": [
@@ -350,6 +355,25 @@
         "通过存储或渲染结果观察已提交事实"
       ],
       "verification": "python3 scripts/walkthrough.py --workflow observe-service"
+    },
+    {
+      "id": "capacity-drill",
+      "name": "受限环境容量演练",
+      "entry": "进程启动门禁 + GET /v1/status capacity",
+      "success": "混合负载下门禁拒绝不留承诺、健康与取消有界、过载承诺可恢复",
+      "failure": "门禁泄漏承诺、健康查询超时或已接受任务丢失",
+      "module_ids": [
+        "capacity",
+        "service",
+        "engine",
+        "observe",
+        "persist"
+      ],
+      "steps": [
+        "在受限CPU/内存与收紧门禁下启动真实进程",
+        "通过状态接口和任务终态观察门禁与恢复行为"
+      ],
+      "verification": "python3 scripts/capacity_drill.py"
     }
   ],
   "complexity": {
